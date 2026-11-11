@@ -51,11 +51,33 @@ export function renderMonth(state, ym, issues, { editable = true } = {}) {
     } else if (ex && !hol) {
       body = `<div class="off-label">${esc(ex)}</div>`;
     }
-    html += `<div class="${cls}"><div class="dnum"><span class="dn">${d}</span><span class="dow">${m}/${d}（${WD[w]}）</span>${hol ? `<span class="hol">${esc(hol)}</span>` : ''}</div>${body}</div>`;
+    html += `<div class="${cls}"${day ? ` data-day="${k}"` : ''}><div class="dnum"><span class="dn">${d}</span><span class="dow">${m}/${d}（${WD[w]}）</span>${hol ? `<span class="hol">${esc(hol)}</span>` : ''}</div>${body}</div>`;
   }
   const used = first.getDay() + lastDay;
   for (let i = used % 7 ? 7 - (used % 7) : 0; i > 0; i--) html += '<div class="cal-cell blank"></div>';
   return html + '</div>';
+}
+
+// スマホのカレンダーで日付をタップしたときの詳細
+export function renderDay(state, k, issues) {
+  const names = nameMap(state);
+  const day = state.schedule?.[k];
+  if (!day) return '';
+  return state.roles
+    .map((role, ri) => {
+      const slot = day[role.id] || [];
+      const people = Array.from({ length: role.count }, (_, i) => slotHtml(state, k, role, i, slot[i], names, issues, true)).join('');
+      const msgs = Array.from({ length: role.count }, (_, i) => issues.get(`${k}|${role.id}|${i}`) || []).flat();
+      return `<div class="day-role role-${ri % 6}"><div class="day-role-name">${esc(role.name)}</div><div class="day-people">${people}</div>${
+        msgs.length ? `<div class="day-warn">注意：${esc([...new Set(msgs)].join('／'))}</div>` : ''
+      }</div>`;
+    })
+    .join('');
+}
+
+// 係の色の凡例
+export function renderLegend(state) {
+  return `<div class="legend">${state.roles.map((r, ri) => `<span class="line role-${ri % 6}">${esc(r.name)}</span>`).join('')}</div>`;
 }
 
 export function renderList(state, ym, issues) {

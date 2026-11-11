@@ -1,7 +1,7 @@
 // 画面全体の制御
 import { load, save, clearSaved, defaultState, backupFileName, readJSONFile } from './storage.js';
 import { generate, validate, countUp, periodMonths, activeMembers, unavailableReason, ngSet, prevWorkDay } from './scheduler.js';
-import { renderMonth, renderList, renderCounts } from './calendar.js';
+import { renderMonth, renderList, renderCounts, renderDay, renderLegend } from './calendar.js';
 import { settingsHtml, bindSettings } from './settings.js';
 import { toCSV, download } from './export.js';
 import { esc, ymLabel, parse, WD, fmt } from './utils.js';
@@ -11,6 +11,13 @@ let currentTab = 'settings';
 let viewYm = null;
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
+
+// スマホでの表示方法（リスト／カレンダー）。端末ごとに覚えておく
+const mobileMQ = matchMedia('(max-width: 640px)');
+const VIEW_KEY = 'touban-mobile-view';
+let mobileView = 'list';
+try { mobileView = localStorage.getItem(VIEW_KEY) === 'calendar' ? 'calendar' : 'list'; } catch (e) { /* 無視 */ }
+const gridOnMobile = () => mobileMQ.matches && mobileView === 'calendar';
 
 // ---------- 保存と再描画 ----------
 function commit({ structural = false, affects = true } = {}) {
@@ -47,8 +54,8 @@ function showTab(name) {
   if (name === 'calendar' || name === 'list') renderView();
   if (name === 'output') renderOutput();
   window.scrollTo(0, 0);
-  // スマホでは今日の当番まで自動でスクロール
-  if (name === 'calendar' && matchMedia('(max-width: 640px)').matches) {
+  // スマホのリスト表示では今日の当番まで自動でスクロール
+  if (name === 'calendar' && mobileMQ.matches && mobileView === 'list') {
     document.querySelector('#cal .today')?.scrollIntoView({ block: 'start' });
   }
 }
@@ -72,6 +79,8 @@ function renderView() {
   if (!state.schedule) {
     const msg = '<p class="empty-msg">まだ当番表がありません。「① 設定」で名前と係を入れて「1年分を生成する」を押してください。</p>';
     $('#cal').innerHTML = msg;
+    $('#cal').classList.remove('grid-mode');
+    $('#legend').innerHTML = '';
     $('#counts').innerHTML = '';
     $('#issues').innerHTML = '';
     $('#list').innerHTML = msg;
@@ -79,7 +88,12 @@ function renderView() {
   }
   const issues = validate(state, state.schedule);
   if (currentTab === 'calendar') {
-    $('#cal').innerHTML = renderMonth(state, viewYm, issues);
+    const grid = gridOnMobile();
+    $('#cal').classList.toggle('grid-mode', grid);
+    $$('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === mobileView)));
+    // スマホのカレンダー表示では名前が小さいので、日付をタップして詳細から変更する
+    $('#cal').innerHTML = renderMonth(state, viewYm, issues, { editable: !grid });
+    $('#legend').innerHTML = grid ? renderLegend(state) : '';
     $('#counts').innerHTML = renderCounts(state, viewYm, countUp(state, state.schedule));
     $('#issues').innerHTML = issuesHtml(issues);
   } else {
@@ -161,6 +175,22 @@ function pickMember(id) {
   save(state);
   $('#slot-dialog').close();
   renderView();
+  if ($('#day-dialog').open) refreshDayDialog();
+}
+
+// ---------- スマホのカレンダーで日付をタップしたとき ----------
+let dayKey = null;
+
+function openDayDialog(k) {
+  dayKey = k;
+  const d = parse(k);
+  $('#day-title').textContent = `${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）の当番`;
+  refreshDayDialog();
+  $('#day-dialog').showModal();
+}
+
+function refreshDayDialog() {
+  $('#day-body').innerHTML = renderDay(state, dayKey, validate(state, state.schedule));
 }
 
 // ---------- 出力 ----------
@@ -205,6 +235,19 @@ function init() {
     if (nm) return openSlotDialog(nm.dataset.date, nm.dataset.role, Number(nm.dataset.idx));
     const pick = e.target.closest('[data-pick]');
     if (pick) return pickMember(pick.dataset.pick);
+    const view = e.target.closest('[data-view]');
+    if (view) {
+      mobileView = view.dataset.view;
+      try { localStorage.setItem(VIEW_KEY, mobileView); } catch (err) { /* 無視 */ }
+      return renderView();
+    }
+    const cell = e.target.closest('#cal.grid-mode [data-day]');
+    if (cell) return openDayDialog(cell.dataset.day);
+  });
+
+  // 画面の幅がスマホ⇔PCで切り替わったら描き直す
+  mobileMQ.addEventListener('change', () => {
+    if (currentTab === 'calendar') renderView();
   });
 
   $('#btn-print-month').addEventListener('click', () => { ensureViewYm(); printMonths([viewYm]); });
