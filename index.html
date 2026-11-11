@@ -42,10 +42,15 @@
           <strong class="month-label"></strong>
           <button type="button" data-nav="1" aria-label="次の月">▶</button>
         </div>
+        <div class="view-toggle" role="group" aria-label="表示の切り替え">
+          <button type="button" data-view="list">リスト</button>
+          <button type="button" data-view="calendar">カレンダー</button>
+        </div>
         <button type="button" id="btn-generate">1年分を生成する</button>
       </div>
       <div id="issues"></div>
       <div class="cal-wrap" id="cal"></div>
+      <div id="legend"></div>
       <h2 class="sub">担当回数</h2>
       <div class="tbl-wrap" id="counts"></div>
     </section>
@@ -101,6 +106,15 @@
       <p class="hint">グレーの人はルールに合いませんが、選ぶこともできます。</p>
       <div id="dlg-list" class="pick-list"></div>
       <div class="dlg-actions"><button value="cancel">キャンセル</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="day-dialog">
+    <form method="dialog">
+      <h3 id="day-title"></h3>
+      <p class="hint">名前をタップすると担当者を変更できます。</p>
+      <div id="day-body"></div>
+      <div class="dlg-actions"><button value="close">閉じる</button></div>
     </form>
   </dialog>
 
