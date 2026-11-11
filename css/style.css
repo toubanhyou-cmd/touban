@@ -115,6 +115,8 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 }
 .chip.fixed { background: #e1ebf5; color: var(--accent-d); }
 .sub-h { font-size: .85rem; margin: 8px 0 4px; color: var(--text); }
+.fx-group { border-top: 1px solid var(--line); padding: 8px 0; }
+.fx-title { font-weight: 700; font-size: .85rem; margin-bottom: 4px; }
 .chip button { border: 0; background: transparent; padding: 0 8px; color: var(--muted); }
 
 .bulk textarea { flex: 1 1 260px; min-height: 4.5em; }
