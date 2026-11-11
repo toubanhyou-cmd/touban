@@ -293,7 +293,6 @@ dialog h3 { margin: 0 0 4px; font-size: 1rem; }
   .cal-cell .dow { display: inline; }
   .cal-cell .hol { display: block; margin: 0; }
   .cal-cell .off-label { margin: 0; }
-  .cal-cell > .line { flex: 1; }
   .cal-cell:not(.off) { flex-wrap: wrap; }
   .cal-cell:not(.off) .dnum { flex-basis: 100%; }
   .cal-cell .line { width: 100%; padding: 6px 8px; margin-top: 4px; }
