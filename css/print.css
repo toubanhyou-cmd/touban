@@ -1,0 +1,20 @@
+/* 印刷用：A4横で1ヶ月1枚 */
+@page { size: A4 landscape; margin: 10mm; }
+
+* { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+body { background: #fff; font-size: 10pt; }
+body > *:not(#print-area) { display: none !important; }
+#print-area { display: block !important; }
+
+.print-page { break-after: page; }
+.print-page:last-child { break-after: auto; }
+.print-page h2 { font-size: 15pt; margin: 0 0 3mm; }
+
+.cal { min-width: 0; grid-template-columns: repeat(7, 1fr); }
+.cal-head { font-size: 9pt; padding: 1mm; }
+.cal-cell { min-height: 0; height: 27mm; overflow: hidden; padding: 1mm; font-size: 8.5pt; }
+.line { margin-top: .6mm; padding: 0 1mm; line-height: 1.3; }
+.rt { font-size: 7.5pt; }
+.hol, .off-label { font-size: 7pt; }
+.nm { background: none !important; color: inherit !important; font-weight: 400 !important; }
