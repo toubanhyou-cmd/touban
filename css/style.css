@@ -316,3 +316,65 @@ dialog h3 { margin: 0 0 4px; font-size: 1rem; }
   #toast { bottom: calc(76px + env(safe-area-inset-bottom)); width: max-content; max-width: calc(100vw - 32px); }
   .app-footer { padding-bottom: 8px; }
 }
+
+/* ---------- スマホ：リスト／カレンダーの切り替え ---------- */
+.view-toggle { display: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; font-size: .8rem; }
+.legend .line { margin: 0; padding: 2px 8px; }
+
+/* 日付をタップしたときの詳細 */
+.day-role { border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+.day-role-name { font-weight: 700; font-size: .85rem; margin-bottom: 4px; }
+.day-people { display: flex; flex-wrap: wrap; gap: 6px; }
+.day-people .nm { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px; font-size: 1rem; }
+.day-people .nm.bad { border-color: var(--danger); }
+.day-warn { color: var(--danger); font-size: .8rem; margin-top: 6px; }
+
+@media screen and (max-width: 640px) {
+  .view-toggle { display: flex; border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; }
+  .view-toggle button { flex: 1; border: 0; border-radius: 0; color: var(--accent); background: #fff; min-height: 40px; }
+  .view-toggle button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+
+  /* カレンダー形式（7列）。名前は小さく、係は色で区別する */
+  .cal-wrap.grid-mode .cal {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    border-left: 1px solid var(--line);
+    border-top: 1px solid var(--line);
+    background: #fff;
+  }
+  .cal-wrap.grid-mode .cal .cal-head { display: block; font-size: .72rem; padding: 3px 0; }
+  .cal-wrap.grid-mode .cal .cal-cell {
+    display: block;
+    min-height: 68px;
+    margin: 0;
+    padding: 2px;
+    border: 0;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    font-size: .62rem;
+    overflow: hidden;
+  }
+  .cal-wrap.grid-mode .cal .cal-cell.blank { display: block; }
+  .cal-wrap.grid-mode .cal .cal-cell[data-day] { cursor: pointer; }
+  .cal-wrap.grid-mode .cal .cal-cell[data-day]:active { background: #eef3f8; }
+  .cal-wrap.grid-mode .cal .cal-cell.today { box-shadow: inset 0 0 0 2px var(--accent); }
+  .cal-wrap.grid-mode .cal .cal-cell .dnum { font-size: .72rem; line-height: 1.2; }
+  .cal-wrap.grid-mode .cal .cal-cell .dn { display: inline; }
+  .cal-wrap.grid-mode .cal .cal-cell .dow { display: none; }
+  .cal-wrap.grid-mode .cal .cal-cell .hol { display: block; font-size: .5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cal-wrap.grid-mode .cal .cal-cell .off-label { display: none; }
+  .cal-wrap.grid-mode .cal .cal-cell .line { width: auto; padding: 1px 2px; margin-top: 2px; border-radius: 3px; }
+  .cal-wrap.grid-mode .cal .cal-cell .rt,
+  .cal-wrap.grid-mode .cal .cal-cell .sep { display: none; }
+  .cal-wrap.grid-mode .cal .cal-cell .nm {
+    display: block;
+    padding: 0;
+    min-height: 0;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
