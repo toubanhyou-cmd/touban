@@ -1,10 +1,10 @@
 // 画面全体の制御
-import { load, save, clearSaved, defaultState, backupFileName, readJSONFile } from './storage.js';
-import { generate, validate, countUp, periodMonths, activeMembers, unavailableReason, ngSet, prevWorkDay } from './scheduler.js';
-import { renderMonth, renderList, renderCounts, renderDay, renderLegend } from './calendar.js';
-import { settingsHtml, bindSettings } from './settings.js';
-import { toCSV, download } from './export.js';
-import { esc, ymLabel, parse, WD, fmt } from './utils.js';
+import { load, save, clearSaved, defaultState, backupFileName, readJSONFile } from './storage.js?v=20261112c';
+import { generate, validate, countUp, periodMonths, activeMembers, unavailableReason, ngSet, prevWorkDay } from './scheduler.js?v=20261112c';
+import { renderMonth, renderList, renderCounts, renderDay, renderLegend } from './calendar.js?v=20261112c';
+import { initSettings, renderSettings as renderSettingsView } from './settings.js?v=20261112c';
+import { toCSV, download } from './export.js?v=20261112c';
+import { esc, ymLabel, parse, WD, fmt } from './utils.js?v=20261112c';
 
 let state = load();
 let currentTab = 'settings';
@@ -28,10 +28,7 @@ function commit({ structural = false, affects = true } = {}) {
 }
 
 function renderSettings() {
-  const root = $('#settings-root');
-  const y = window.scrollY;
-  root.innerHTML = settingsHtml(state);
-  window.scrollTo(0, y);
+  renderSettingsView(state);
 }
 
 function renderBanner() {
@@ -123,7 +120,9 @@ function runGenerate() {
   if (!state.roles.length || state.roles.some((r) => !r.name.trim())) return alert('係の名前を入力してください');
   if (state.schedule && !confirm('今の当番表を作り直します。手動で入れ替えた内容は消えます。よろしいですか？')) return;
   state.seed = Math.floor(Math.random() * 2 ** 31);
-  state.schedule = generate(state, state.seed);
+  const res = generate(state, state.seed);
+  state.schedule = res.schedule;
+  state.autoFixed = res.autoFixed;
   state.generatedAt = new Date().toISOString();
   state.stale = false;
   save(state);
@@ -212,13 +211,12 @@ function printMonths(months) {
 
 // ---------- イベント ----------
 function init() {
-  renderSettings();
-  renderBanner();
-  bindSettings($('#settings-root'), {
+  initSettings($('#settings-root'), $('#member-dialog'), {
     get state() { return state; },
     commit,
     generate: runGenerate,
   });
+  renderBanner();
 
   $$('.tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
   $('#banner-go').addEventListener('click', runGenerate);

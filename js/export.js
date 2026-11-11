@@ -1,5 +1,5 @@
 // CSV・ファイルのダウンロード
-import { WD, parse } from './utils.js';
+import { WD, parse } from './utils.js?v=20261112c';
 
 export function download(filename, text, mime, withBom = false) {
   const blob = new Blob([withBom ? '﻿' + text : text], { type: mime });

@@ -1,7 +1,7 @@
 // カレンダー・一覧・集計表の描画
-import { WD, fmt, parse, esc } from './utils.js';
-import { holidayName } from './holidays.js';
-import { excludedReason, activeMembers } from './scheduler.js';
+import { WD, fmt, parse, esc } from './utils.js?v=20261112c';
+import { holidayName } from './holidays.js?v=20261112c';
+import { excludedReason, activeMembers } from './scheduler.js?v=20261112c';
 
 const nameMap = (state) => new Map(state.members.map((m) => [m.id, m.name]));
 

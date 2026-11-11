@@ -1,5 +1,5 @@
 // 保存（ブラウザ内の localStorage と JSONファイル）
-import { fmt } from './utils.js';
+import { fmt } from './utils.js?v=20261112c';
 
 const KEY = 'touban-maker-v1';
 
@@ -10,8 +10,8 @@ export function defaultState() {
     startYear: now.getFullYear(),
     startMonth: now.getMonth() + 1,
     roles: [
-      { id: 'r_souji', name: '掃除係', count: 2 },
-      { id: 'r_gomi', name: 'ゴミ出し係', count: 1 },
+      { id: 'r_souji', name: '掃除係', count: 2, rotate: [] },
+      { id: 'r_gomi', name: 'ゴミ出し係', count: 1, rotate: [] },
     ],
     members: [],
     excludeWeekends: true,
@@ -22,6 +22,7 @@ export function defaultState() {
     avoidConsecutive: true,
     allowMultiRole: false,
     schedule: null, // { 'YYYY-MM-DD': { roleId: [memberId|null, ...] } }
+    autoFixed: null, // 毎月ローテーション固定で選ばれた人 { 'YYYY-MM': { '係ID|曜日': memberId } }
     seed: null,
     generatedAt: null,
     stale: false,
@@ -40,7 +41,12 @@ export function normalize(raw) {
     fixed: m.fixed || [], // { wd: 0-6, roleId } 毎週この曜日はこの係
     fixedOnly: !!m.fixedOnly, // true なら固定の日以外は入れない
   }));
-  s.roles = (s.roles || []).map((r) => ({ id: r.id, name: r.name || '', count: Math.max(1, Number(r.count) || 1) }));
+  s.roles = (s.roles || []).map((r) => ({
+    id: r.id,
+    name: r.name || '',
+    count: Math.max(1, Number(r.count) || 1),
+    rotate: Array.isArray(r.rotate) ? r.rotate : [], // 毎月ローテーションで1人を固定する曜日
+  }));
   for (const k of ['excludeWeekdays', 'excludeDates', 'ngPairs']) if (!Array.isArray(s[k])) s[k] = [];
   return s;
 }

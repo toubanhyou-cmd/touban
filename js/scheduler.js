@@ -1,6 +1,6 @@
 // 当番の割り当てロジック
-import { fmt, parse, addDays, pad, mulberry32 } from './utils.js';
-import { holidayName } from './holidays.js';
+import { fmt, parse, addDays, pad, mulberry32 } from './utils.js?v=20261112c';
+import { holidayName } from './holidays.js?v=20261112c';
 
 // 期間（開始月から12ヶ月）の 'YYYY-MM' 一覧
 export function periodMonths(state) {
@@ -63,9 +63,46 @@ export function ngSet(state) {
   return s;
 }
 
+// 係ごとの「毎月ローテーションで曜日固定」の担当者を、月ごとに1人ずつ決める
+// 戻り値：{ 'YYYY-MM': { '係ID|曜日': メンバーID } }
+function buildAutoFixed(state, members, rand) {
+  const map = {};
+  const picks = {};
+  members.forEach((m) => (picks[m.id] = 0));
+  for (const ym of periodMonths(state)) {
+    map[ym] = {};
+    const usedThisMonth = new Set();
+    for (const role of state.roles) {
+      for (const wd of role.rotate || []) {
+        // 手で決めた固定（その月 or 期間中ずっと）があれば、そちらを優先する
+        const manual = members.some((m) =>
+          m.fixed.some((f) => f.roleId === role.id && (f.wd === wd || f.wd === -1) && (!f.ym || f.ym === ym))
+        );
+        if (manual) continue;
+        let cands = members.filter((m) => !m.fixedOnly && !m.noRoles.includes(role.id) && !m.offWeekdays.includes(wd));
+        const fresh = cands.filter((m) => !usedThisMonth.has(m.id));
+        if (fresh.length) cands = fresh;
+        if (!cands.length) continue;
+        // これまで選ばれた回数が少ない人から。同じならランダム
+        const pick = cands.map((m) => ({ m, a: picks[m.id], r: rand() })).sort((x, y) => x.a - y.a || x.r - y.r)[0].m;
+        map[ym][`${role.id}|${wd}`] = pick.id;
+        picks[pick.id]++;
+        usedThisMonth.add(pick.id);
+      }
+    }
+  }
+  return map;
+}
+
+// ローテーション固定で選ばれた人か
+export const isAutoFixed = (state, memberId, roleId, key, weekday) =>
+  state.autoFixed?.[key.slice(0, 7)]?.[`${roleId}|${weekday}`] === memberId;
+
 // 1回分の割り当て
 function attempt(state, rand) {
   const members = activeMembers(state);
+  const byId = new Map(members.map((m) => [m.id, m]));
+  const autoFixed = buildAutoFixed(state, members, rand);
   const ng = ngSet(state);
   const roleCnt = {}, total = {}, monthCnt = {}, monthRole = {};
   members.forEach((m) => { roleCnt[m.id] = {}; total[m.id] = 0; monthCnt[m.id] = 0; monthRole[m.id] = {}; });
@@ -106,6 +143,19 @@ function attempt(state, rand) {
         if (!state.allowMultiRole && today.has(m.id)) continue;
         if (day[role.id].some((o) => ng.has(o + '|' + m.id))) continue;
         place(m, role);
+      }
+      // 毎月ローテーションの担当者
+      const autoId = autoFixed[curYm]?.[`${role.id}|${w}`];
+      const am = autoId && byId.get(autoId);
+      if (
+        am &&
+        day[role.id].length < role.count &&
+        !day[role.id].includes(am.id) &&
+        !unavailableReason(am, role.id, k, w) &&
+        (state.allowMultiRole || !today.has(am.id)) &&
+        !day[role.id].some((o) => ng.has(o + '|' + am.id))
+      ) {
+        place(am, role);
       }
     }
 
@@ -150,7 +200,7 @@ function attempt(state, rand) {
     schedule[k] = day;
     prev = today;
   }
-  return { schedule, unfilled, relaxed };
+  return { schedule, unfilled, relaxed, autoFixed };
 }
 
 // 担当回数の集計
@@ -195,7 +245,7 @@ function score(state, res) {
   return s;
 }
 
-// 何通りか試して、一番偏りの少ない結果を返す
+// 何通りか試して、一番偏りの少ない結果を返す（schedule と、ローテーション固定の担当 autoFixed）
 export function generate(state, seed, tries = 30) {
   let best = null;
   for (let t = 0; t < tries; t++) {
@@ -203,7 +253,7 @@ export function generate(state, seed, tries = 30) {
     const sc = score(state, res);
     if (!best || sc < best.sc) best = { ...res, sc };
   }
-  return best.schedule;
+  return { schedule: best.schedule, autoFixed: best.autoFixed };
 }
 
 // ルール違反のチェック（手動で入れ替えたあとにも使う）
@@ -235,7 +285,7 @@ export function validate(state, schedule) {
         if (slot.indexOf(id) !== i) add(k, role.id, i, '同じ係に重複');
         else if (!state.allowMultiRole && seen.has(id)) add(k, role.id, i, '同じ日に別の係と兼任');
         for (let j = 0; j < i; j++) if (slot[j] && ng.has(slot[j] + '|' + id)) add(k, role.id, i, '組ませないペア');
-        if (state.avoidConsecutive && prev.has(id) && !isFixed(m, role.id, w, k)) add(k, role.id, i, '前の当番日と連続');
+        if (state.avoidConsecutive && prev.has(id) && !isFixed(m, role.id, w, k) && !isAutoFixed(state, id, role.id, k, w)) add(k, role.id, i, '前の当番日と連続');
         seen.add(id);
       }
     }

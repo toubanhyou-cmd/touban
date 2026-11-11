@@ -1,6 +1,6 @@
 // 日本の祝日を計算で求める（2007年以降の祝日法に対応。春分・秋分は2099年まで有効な近似式）
 // 祝日法が改正されたときは、このファイルを修正してください。
-import { fmt, parse, addDays } from './utils.js';
+import { fmt, parse, addDays } from './utils.js?v=20261112c';
 
 const cache = new Map();
 
