@@ -38,13 +38,15 @@ export function workDays(state) {
 export const activeMembers = (state) => state.members.filter((m) => m.name.trim());
 
 // 毎週この曜日はこの係、と固定されているか
-// wd が -1 のときは「毎日」（係固定）
-export const isFixed = (member, roleId, weekday) =>
-  member.fixed.some((f) => (f.wd === weekday || f.wd === -1) && f.roleId === roleId);
+// wd が -1 のときは「毎日」（係固定）。ym（'YYYY-MM'）があればその月だけ有効
+export const isFixed = (member, roleId, weekday, key) =>
+  member.fixed.some(
+    (f) => (f.wd === weekday || f.wd === -1) && f.roleId === roleId && (!f.ym || key.startsWith(f.ym))
+  );
 
 // その人がその係・その日に入れない理由
 export function unavailableReason(member, roleId, key, weekday) {
-  const fixed = isFixed(member, roleId, weekday);
+  const fixed = isFixed(member, roleId, weekday, key);
   if (!fixed && member.fixedOnly) return '固定の日以外';
   if (!fixed && member.noRoles.includes(roleId)) return 'この係は担当外';
   if (member.offWeekdays.includes(weekday)) return '不可曜日';
@@ -100,7 +102,7 @@ function attempt(state, rand) {
       day[role.id] = [];
       for (const m of members) {
         if (day[role.id].length >= role.count) break;
-        if (!isFixed(m, role.id, w) || unavailableReason(m, role.id, k, w)) continue;
+        if (!isFixed(m, role.id, w, k) || unavailableReason(m, role.id, k, w)) continue;
         if (!state.allowMultiRole && today.has(m.id)) continue;
         if (day[role.id].some((o) => ng.has(o + '|' + m.id))) continue;
         place(m, role);
@@ -233,7 +235,7 @@ export function validate(state, schedule) {
         if (slot.indexOf(id) !== i) add(k, role.id, i, '同じ係に重複');
         else if (!state.allowMultiRole && seen.has(id)) add(k, role.id, i, '同じ日に別の係と兼任');
         for (let j = 0; j < i; j++) if (slot[j] && ng.has(slot[j] + '|' + id)) add(k, role.id, i, '組ませないペア');
-        if (state.avoidConsecutive && prev.has(id) && !isFixed(m, role.id, w)) add(k, role.id, i, '前の当番日と連続');
+        if (state.avoidConsecutive && prev.has(id) && !isFixed(m, role.id, w, k)) add(k, role.id, i, '前の当番日と連続');
         seen.add(id);
       }
     }

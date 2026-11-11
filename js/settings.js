@@ -1,5 +1,6 @@
 // ① 設定タブ
 import { WD, esc, uid, fmt } from './utils.js';
+import { periodMonths } from './scheduler.js';
 
 const SAMPLE = ['佐藤', '鈴木', '高橋', '田中', '伊藤', '渡辺', '山本', '中村', '小林', '加藤', '吉田', '山田'];
 const openMembers = new Set(); // 詳細を開いているメンバー
@@ -22,6 +23,66 @@ const dateLabel = (k) => {
   return `${y}/${m}/${d}`;
 };
 
+const ymShort = (ym) => {
+  const [y, mo] = ym.split('-').map(Number);
+  return `${y}年${mo}月`;
+};
+
+// 固定ルールの表示名（例：2027年4月だけ・毎週月曜・ゴミ出し係）
+function fixedLabel(state, f) {
+  const role = state.roles.find((r) => r.id === f.roleId)?.name || '(削除された係)';
+  const when = f.wd === -1 ? '毎日' : `毎週${WD[f.wd]}曜`;
+  return `${f.ym ? ymShort(f.ym) + 'だけ・' : ''}${when}・${role}`;
+}
+
+const sortFixed = (arr) => arr.sort((a, b) => (a.ym || '').localeCompare(b.ym || '') || a.wd - b.wd);
+
+const ymOptionsHtml = (state) =>
+  `<option value="">期間中ずっと</option>` + periodMonths(state).map((ym) => `<option value="${ym}">${ymShort(ym)}だけ</option>`).join('');
+const wdOptionsHtml = () => `<option value="-1">毎日</option>` + WD.map((w, i) => `<option value="${i}">${w}曜</option>`).join('');
+const roleOptionsHtml = (state) => state.roles.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
+
+// 月ごとの固定の一覧（全メンバー分をまとめて表示）
+function fixedOverviewHtml(state) {
+  const active = state.members.filter((m) => m.name.trim());
+  const groups = new Map(); // ym('' = 期間中ずっと) → 行
+  for (const m of active) {
+    m.fixed.forEach((f, i) => {
+      const key = f.ym || '';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ m, f, i });
+    });
+  }
+  const order = ['', ...periodMonths(state)];
+  const extra = [...groups.keys()].filter((k) => !order.includes(k)).sort();
+  const body = [...order, ...extra]
+    .filter((k) => groups.has(k))
+    .map((k) => {
+      const rows = groups.get(k).sort((a, b) => a.f.wd - b.f.wd);
+      const title = k ? ymShort(k) + (periodMonths(state).includes(k) ? '' : '（期間外）') : '期間中ずっと';
+      return `<div class="fx-group"><div class="fx-title">${esc(title)}</div><div class="chips">${rows
+        .map(
+          ({ m, f, i }) =>
+            `<span class="chip fixed">${esc((f.wd === -1 ? '毎日' : WD[f.wd] + '曜') + '・' + (state.roles.find((r) => r.id === f.roleId)?.name || '(削除された係)') + '：' + m.name)}<button type="button" data-action="del-fixed" data-m="${m.id}" data-i="${i}" aria-label="削除">×</button></span>`
+        )
+        .join('')}</div></div>`;
+    })
+    .join('');
+  return `
+  <section class="card">
+    <h2>月ごとの固定</h2>
+    <p class="hint">「4月の月曜のゴミ出しは佐藤さん、5月は鈴木さん」のように、月ごとに固定する人を変えられます。ここで追加した固定は、各メンバーの「入れない日・固定」にも表示されます。</p>
+    <div class="row">
+      <select id="fx-ym" aria-label="対象の月">${ymOptionsHtml(state)}</select>
+      <select id="fx-wd" aria-label="曜日">${wdOptionsHtml()}</select>
+      <select id="fx-role" aria-label="係">${roleOptionsHtml(state)}</select>
+      <select id="fx-m" aria-label="担当する人"><option value="">担当する人</option>${active.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select>
+      <button type="button" class="small" data-action="add-fixed-ov">追加</button>
+    </div>
+    ${body || '<p class="hint">まだ固定はありません。</p>'}
+  </section>`;
+}
+
 function memberHtml(state, m) {
   const roles = state.roles
     .map((r) => check(`data-m="${m.id}" data-norole="${r.id}"`, !m.noRoles.includes(r.id), esc(r.name)))
@@ -32,20 +93,16 @@ function memberHtml(state, m) {
     .sort()
     .map((k) => `<span class="chip">${dateLabel(k)}<button type="button" data-action="del-offdate" data-m="${m.id}" data-date="${k}" aria-label="削除">×</button></span>`)
     .join('');
-  const roleName = new Map(state.roles.map((r) => [r.id, r.name]));
-  const fixedLabel = (f) => `${f.wd === -1 ? '毎日' : '毎週' + WD[f.wd] + '曜'}・${roleName.get(f.roleId) || '(削除された係)'}`;
   const fixedChips = m.fixed
-    .map((f, i) => `<span class="chip fixed">${esc(fixedLabel(f))}<button type="button" data-action="del-fixed" data-m="${m.id}" data-i="${i}" aria-label="削除">×</button></span>`)
+    .map((f, i) => `<span class="chip fixed">${esc(fixedLabel(state, f))}<button type="button" data-action="del-fixed" data-m="${m.id}" data-i="${i}" aria-label="削除">×</button></span>`)
     .join('');
-  const wdOptions = `<option value="-1">毎日</option>` + WD.map((w, i) => `<option value="${i}">${w}曜</option>`).join('');
-  const roleOptions = state.roles.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
   const offSummary = [
     m.offWeekdays.length ? `毎週${m.offWeekdays.map((i) => WD[i]).join('・')}` : '',
     m.offDates.length ? `${m.offDates.length}日` : '',
   ].filter(Boolean).join('、');
   const summary = [
     offSummary ? `入れない日：${offSummary}` : '',
-    m.fixed.length ? `固定：${m.fixed.map(fixedLabel).join('、')}${m.fixedOnly ? '（固定の日だけ）' : ''}` : '',
+    m.fixed.length ? `固定：${m.fixed.map((f) => fixedLabel(state, f)).join('、')}${m.fixedOnly ? '（固定の日だけ）' : ''}` : '',
   ].filter(Boolean).join(' ／ ');
   return `
   <div class="member">
@@ -64,10 +121,11 @@ function memberHtml(state, m) {
       </div>
       <div class="chips">${dates}</div>
       <h4 class="sub-h">固定（曜日固定・係固定）</h4>
-      <p class="hint">例：「月曜・ゴミ出し係」なら毎週月曜は必ずゴミ出し係。「毎日・掃除係」なら当番日は毎日掃除係になります。</p>
+      <p class="hint">例：「月曜・ゴミ出し係」なら毎週月曜は必ずゴミ出し係。「毎日・掃除係」なら当番日は毎日掃除係になります。月を選ぶと、その月だけの固定になります。</p>
       <div class="row">
-        <select data-fixed-wd="${m.id}" aria-label="曜日">${wdOptions}</select>
-        <select data-fixed-role="${m.id}" aria-label="係">${roleOptions}</select>
+        <select data-fixed-ym="${m.id}" aria-label="対象の月">${ymOptionsHtml(state)}</select>
+        <select data-fixed-wd="${m.id}" aria-label="曜日">${wdOptionsHtml()}</select>
+        <select data-fixed-role="${m.id}" aria-label="係">${roleOptionsHtml(state)}</select>
         <button type="button" class="small" data-action="add-fixed" data-m="${m.id}">追加</button>
       </div>
       <div class="chips">${fixedChips}</div>
@@ -122,6 +180,8 @@ export function settingsHtml(state) {
     </div>
     ${state.members.map((m) => memberHtml(state, m)).join('')}
   </section>
+
+  ${fixedOverviewHtml(state)}
 
   <section class="card">
     <h2>当番を入れない日</h2>
@@ -178,6 +238,12 @@ export function settingsHtml(state) {
 export function bindSettings(root, ctx) {
   const findM = (id) => ctx.state.members.find((m) => m.id === id);
   const findR = (id) => ctx.state.roles.find((r) => r.id === id);
+  const addFixed = (m, { wd, roleId, ym }) => {
+    const f = { wd, roleId };
+    if (ym) f.ym = ym;
+    if (!m.fixed.some((x) => x.wd === wd && x.roleId === roleId && (x.ym || '') === (ym || ''))) m.fixed.push(f);
+    sortFixed(m.fixed);
+  };
   const toggle = (arr, v, on) => {
     const i = arr.indexOf(v);
     if (on && i < 0) arr.push(v);
@@ -288,10 +354,18 @@ export function bindSettings(root, ctx) {
         const m = findM(d.m);
         const wd = Number(root.querySelector(`[data-fixed-wd="${d.m}"]`).value);
         const roleId = root.querySelector(`[data-fixed-role="${d.m}"]`).value;
+        const ym = root.querySelector(`[data-fixed-ym="${d.m}"]`).value;
         if (!roleId) return alert('係を選んでください');
-        if (!m.fixed.some((f) => f.wd === wd && f.roleId === roleId)) m.fixed.push({ wd, roleId });
-        m.fixed.sort((a, b) => a.wd - b.wd);
+        addFixed(m, { wd, roleId, ym });
         openMembers.add(d.m);
+        return ctx.commit({ structural: true });
+      }
+      case 'add-fixed-ov': {
+        const m = findM(root.querySelector('#fx-m').value);
+        const roleId = root.querySelector('#fx-role').value;
+        if (!m) return alert('担当する人を選んでください');
+        if (!roleId) return alert('係を選んでください');
+        addFixed(m, { wd: Number(root.querySelector('#fx-wd').value), roleId, ym: root.querySelector('#fx-ym').value });
         return ctx.commit({ structural: true });
       }
       case 'del-fixed': {
