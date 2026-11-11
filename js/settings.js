@@ -32,10 +32,21 @@ function memberHtml(state, m) {
     .sort()
     .map((k) => `<span class="chip">${dateLabel(k)}<button type="button" data-action="del-offdate" data-m="${m.id}" data-date="${k}" aria-label="削除">×</button></span>`)
     .join('');
-  const summary = [
+  const roleName = new Map(state.roles.map((r) => [r.id, r.name]));
+  const fixedLabel = (f) => `${f.wd === -1 ? '毎日' : '毎週' + WD[f.wd] + '曜'}・${roleName.get(f.roleId) || '(削除された係)'}`;
+  const fixedChips = m.fixed
+    .map((f, i) => `<span class="chip fixed">${esc(fixedLabel(f))}<button type="button" data-action="del-fixed" data-m="${m.id}" data-i="${i}" aria-label="削除">×</button></span>`)
+    .join('');
+  const wdOptions = `<option value="-1">毎日</option>` + WD.map((w, i) => `<option value="${i}">${w}曜</option>`).join('');
+  const roleOptions = state.roles.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
+  const offSummary = [
     m.offWeekdays.length ? `毎週${m.offWeekdays.map((i) => WD[i]).join('・')}` : '',
     m.offDates.length ? `${m.offDates.length}日` : '',
   ].filter(Boolean).join('、');
+  const summary = [
+    offSummary ? `入れない日：${offSummary}` : '',
+    m.fixed.length ? `固定：${m.fixed.map(fixedLabel).join('、')}${m.fixedOnly ? '（固定の日だけ）' : ''}` : '',
+  ].filter(Boolean).join(' ／ ');
   return `
   <div class="member">
     <div class="row">
@@ -44,13 +55,23 @@ function memberHtml(state, m) {
       <button type="button" class="btn-danger small" data-action="del-member" data-m="${m.id}">削除</button>
     </div>
     <details data-m="${m.id}"${openMembers.has(m.id) ? ' open' : ''}>
-      <summary>入れない日${summary ? `：<strong>${summary}</strong>` : '（なし）'}</summary>
+      <summary>入れない日・固定${summary ? `（<strong>${esc(summary)}</strong>）` : '（なし）'}</summary>
+      <h4 class="sub-h">入れない日</h4>
       <div class="row"><span class="lbl">毎週</span>${wds}</div>
       <div class="row"><span class="lbl">日付</span>
         <input type="date" data-offdate-input="${m.id}">
         <button type="button" class="small" data-action="add-offdate" data-m="${m.id}">追加</button>
       </div>
       <div class="chips">${dates}</div>
+      <h4 class="sub-h">固定（曜日固定・係固定）</h4>
+      <p class="hint">例：「月曜・ゴミ出し係」なら毎週月曜は必ずゴミ出し係。「毎日・掃除係」なら当番日は毎日掃除係になります。</p>
+      <div class="row">
+        <select data-fixed-wd="${m.id}" aria-label="曜日">${wdOptions}</select>
+        <select data-fixed-role="${m.id}" aria-label="係">${roleOptions}</select>
+        <button type="button" class="small" data-action="add-fixed" data-m="${m.id}">追加</button>
+      </div>
+      <div class="chips">${fixedChips}</div>
+      ${m.fixed.length ? `<div class="row">${check(`data-m="${m.id}" data-fixedonly="1"`, m.fixedOnly, '固定の日だけ担当する（ほかの日には入れない）')}</div>` : ''}
     </details>
   </div>`;
 }
@@ -90,7 +111,7 @@ export function settingsHtml(state) {
 
   <section class="card">
     <h2>メンバー（${active.length}人）</h2>
-    <p class="hint">名前の横のチェックは「担当できる係」です。「入れない日」を開くと、毎週の不可曜日や個別の不可日を設定できます。</p>
+    <p class="hint">名前の横のチェックは「担当できる係」です。「入れない日・固定」を開くと、不可曜日・不可日のほか、「毎週月曜はゴミ出し係」のような曜日固定や、「毎日掃除係」のような係固定を設定できます。</p>
     <div class="row bulk">
       <textarea id="bulk-names" rows="3" placeholder="名前を1行に1人ずつ貼り付けて「まとめて追加」"></textarea>
       <div class="col">
@@ -202,6 +223,10 @@ export function bindSettings(root, ctx) {
       toggle(findM(d.m).offWeekdays, Number(d.offwd), t.checked);
       return ctx.commit({ structural: true });
     }
+    if (d.fixedonly) {
+      findM(d.m).fixedOnly = t.checked;
+      return ctx.commit({ structural: true });
+    }
     if (d.exwd) {
       toggle(s.excludeWeekdays, Number(d.exwd), t.checked);
       return ctx.commit({});
@@ -221,12 +246,16 @@ export function bindSettings(root, ctx) {
         const r = findR(d.r);
         if (!confirm(`「${r.name || '名前なしの係'}」を削除しますか？`)) return;
         s.roles = s.roles.filter((x) => x.id !== d.r);
-        s.members.forEach((m) => (m.noRoles = m.noRoles.filter((x) => x !== d.r)));
+        s.members.forEach((m) => {
+          m.noRoles = m.noRoles.filter((x) => x !== d.r);
+          m.fixed = m.fixed.filter((f) => f.roleId !== d.r);
+          if (!m.fixed.length) m.fixedOnly = false;
+        });
         return ctx.commit({ structural: true });
       }
       case 'add-member': {
         const id = uid('m_');
-        s.members.push({ id, name: '', noRoles: [], offWeekdays: [], offDates: [] });
+        s.members.push({ id, name: '', noRoles: [], offWeekdays: [], offDates: [], fixed: [], fixedOnly: false });
         ctx.commit({ structural: true });
         root.querySelector(`.name-input[data-m="${id}"]`)?.focus();
         return;
@@ -237,7 +266,7 @@ export function bindSettings(root, ctx) {
           ? SAMPLE
           : root.querySelector('#bulk-names').value.split(/[\n,、]/).map((x) => x.trim()).filter(Boolean);
         if (!list.length) return alert('名前を入力してください');
-        list.forEach((name) => s.members.push({ id: uid('m_'), name, noRoles: [], offWeekdays: [], offDates: [] }));
+        list.forEach((name) => s.members.push({ id: uid('m_'), name, noRoles: [], offWeekdays: [], offDates: [], fixed: [], fixedOnly: false }));
         return ctx.commit({ structural: true });
       }
       case 'del-member': {
@@ -253,6 +282,22 @@ export function bindSettings(root, ctx) {
         const m = findM(d.m);
         if (!m.offDates.includes(v)) m.offDates.push(v);
         openMembers.add(d.m);
+        return ctx.commit({ structural: true });
+      }
+      case 'add-fixed': {
+        const m = findM(d.m);
+        const wd = Number(root.querySelector(`[data-fixed-wd="${d.m}"]`).value);
+        const roleId = root.querySelector(`[data-fixed-role="${d.m}"]`).value;
+        if (!roleId) return alert('係を選んでください');
+        if (!m.fixed.some((f) => f.wd === wd && f.roleId === roleId)) m.fixed.push({ wd, roleId });
+        m.fixed.sort((a, b) => a.wd - b.wd);
+        openMembers.add(d.m);
+        return ctx.commit({ structural: true });
+      }
+      case 'del-fixed': {
+        const m = findM(d.m);
+        m.fixed.splice(Number(d.i), 1);
+        if (!m.fixed.length) m.fixedOnly = false;
         return ctx.commit({ structural: true });
       }
       case 'del-offdate': {

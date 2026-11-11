@@ -37,6 +37,8 @@ export function normalize(raw) {
     noRoles: m.noRoles || [],
     offWeekdays: m.offWeekdays || [],
     offDates: m.offDates || [],
+    fixed: m.fixed || [], // { wd: 0-6, roleId } 毎週この曜日はこの係
+    fixedOnly: !!m.fixedOnly, // true なら固定の日以外は入れない
   }));
   s.roles = (s.roles || []).map((r) => ({ id: r.id, name: r.name || '', count: Math.max(1, Number(r.count) || 1) }));
   for (const k of ['excludeWeekdays', 'excludeDates', 'ngPairs']) if (!Array.isArray(s[k])) s[k] = [];

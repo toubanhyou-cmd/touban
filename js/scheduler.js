@@ -37,9 +37,16 @@ export function workDays(state) {
 
 export const activeMembers = (state) => state.members.filter((m) => m.name.trim());
 
+// 毎週この曜日はこの係、と固定されているか
+// wd が -1 のときは「毎日」（係固定）
+export const isFixed = (member, roleId, weekday) =>
+  member.fixed.some((f) => (f.wd === weekday || f.wd === -1) && f.roleId === roleId);
+
 // その人がその係・その日に入れない理由
 export function unavailableReason(member, roleId, key, weekday) {
-  if (member.noRoles.includes(roleId)) return 'この係は担当外';
+  const fixed = isFixed(member, roleId, weekday);
+  if (!fixed && member.fixedOnly) return '固定の日以外';
+  if (!fixed && member.noRoles.includes(roleId)) return 'この係は担当外';
   if (member.offWeekdays.includes(weekday)) return '不可曜日';
   if (member.offDates.includes(key)) return '不可日';
   return null;
@@ -79,9 +86,31 @@ function attempt(state, rand) {
     }
     const today = new Set();
     const day = {};
+    const place = (m, role) => {
+      day[role.id].push(m.id);
+      today.add(m.id);
+      monthRole[m.id][role.id] = (monthRole[m.id][role.id] || 0) + 1;
+      roleCnt[m.id][role.id] = (roleCnt[m.id][role.id] || 0) + 1;
+      monthCnt[m.id]++;
+      total[m.id]++;
+    };
+
+    // 1回目：曜日固定・係固定の人を先に入れる（固定は連続担当の制限より優先）
     for (const role of roles) {
-      const slot = [];
-      for (let i = 0; i < role.count; i++) {
+      day[role.id] = [];
+      for (const m of members) {
+        if (day[role.id].length >= role.count) break;
+        if (!isFixed(m, role.id, w) || unavailableReason(m, role.id, k, w)) continue;
+        if (!state.allowMultiRole && today.has(m.id)) continue;
+        if (day[role.id].some((o) => ng.has(o + '|' + m.id))) continue;
+        place(m, role);
+      }
+    }
+
+    // 2回目：残りの枠を均等に割り当てる
+    for (const role of roles) {
+      const slot = day[role.id];
+      for (let i = slot.length; i < role.count; i++) {
         let cands = members.filter(
           (m) =>
             !unavailableReason(m, role.id, k, w) &&
@@ -112,15 +141,9 @@ function attempt(state, rand) {
             r: rand(),
           }))
           .sort((x, y) => x.a - y.a || x.b - y.b || x.c - y.c || x.d - y.d || x.r - y.r)[0].m;
-        monthRole[pick.id][role.id] = (monthRole[pick.id][role.id] || 0) + 1;
-        slot.push(pick.id);
-        today.add(pick.id);
-        roleCnt[pick.id][role.id] = (roleCnt[pick.id][role.id] || 0) + 1;
-        monthCnt[pick.id]++;
-        total[pick.id]++;
+        place(pick, role);
         if (usedRelax) relaxed++;
       }
-      day[role.id] = slot;
     }
     schedule[k] = day;
     prev = today;
@@ -156,7 +179,8 @@ function spread(values) {
 
 // 偏りの点数（小さいほど良い）
 function score(state, res) {
-  const members = activeMembers(state);
+  // 固定の日だけの人・毎日固定の人は、偏りの計算から外す
+  const members = activeMembers(state).filter((m) => !m.fixedOnly && !m.fixed.some((f) => f.wd === -1));
   const { month, year } = countUp(state, res.schedule);
   let s = res.unfilled * 10000 + res.relaxed * 100;
   for (const role of state.roles) {
@@ -209,7 +233,7 @@ export function validate(state, schedule) {
         if (slot.indexOf(id) !== i) add(k, role.id, i, '同じ係に重複');
         else if (!state.allowMultiRole && seen.has(id)) add(k, role.id, i, '同じ日に別の係と兼任');
         for (let j = 0; j < i; j++) if (slot[j] && ng.has(slot[j] + '|' + id)) add(k, role.id, i, '組ませないペア');
-        if (state.avoidConsecutive && prev.has(id)) add(k, role.id, i, '前の当番日と連続');
+        if (state.avoidConsecutive && prev.has(id) && !isFixed(m, role.id, w)) add(k, role.id, i, '前の当番日と連続');
         seen.add(id);
       }
     }
